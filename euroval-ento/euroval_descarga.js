@@ -60,14 +60,6 @@
     const botonPagina = document.querySelector(`.beshop_filters_goTo[page="${numPagina}"]`);
     if (botonPagina) {
       botonPagina.click();
-    } else {
-      // Alternativa: botón "Load More"
-      const loadMore = document.querySelector(`.beshop_loadMore_inner[page="${numPagina}"] button.beshop_loadMoreButton`);
-      if (loadMore) {
-        loadMore.click();
-      } else {
-        throw new Error(`No se encontró botón para página ${numPagina}`);
-      }
     }
 
     // Esperar que cambien los productos
