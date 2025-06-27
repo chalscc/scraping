@@ -6,14 +6,18 @@
     const items = document.querySelectorAll('div.product_list.row article.product-miniature');
     const productosPagina = [];
     items.forEach(item => {
-      const enlace = item.querySelector('a.product-thumbnail')?.href || '';
-      const nombre = item.querySelector('h3.product-name a')?.innerText.trim() || '';
-      const stock = item.querySelector('.product-available')?.innerText.trim() || 'SIN DATOS';
-      const precio = item.querySelector('.price')?.innerText.trim() || '';
-      const imgEl = item.querySelector('a.product-thumbnail img');
-      const imagen = imgEl?.src || '';
-      const referencia = item.querySelector('#reference span')?.innerText.trim() || '';
-      productosPagina.push({ nombre, precio, imagen, enlace, stock, referencia });
+    const enlace = item.querySelector('a.product-thumbnail')?.href || '';
+    const nombre = item.querySelector('h3.product-name a')?.innerText.trim() || '';
+    const nuevo = item.querySelector('li.flag_new')?.innerText.trim() || '';
+    const stock = item.querySelector('.product-available')?.innerText.trim() || '';
+    const fabricacion = item.querySelector('.product-unavailable')?.innerText.trim() || '';
+    const precio = item.querySelector('.price')?.innerText.trim() || '';
+    const imgEl = item.querySelector('a.product-thumbnail img');
+    const imagen = imgEl?.src || '';
+    const referencia = item.querySelector('#reference span')?.innerText.trim() || '';
+    const categoria = item.querySelector('p.product-category')?.innerText.trim() || '';
+
+    productos.push({ nombre, categoria, precio, imagen, enlace, stock, fabricacion, referencia, nuevo });
     });
     return productosPagina;
   }
