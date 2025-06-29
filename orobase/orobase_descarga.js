@@ -166,48 +166,72 @@
     ...cadenasPlata
   ];
 
-  async function scrapUrl(url) {
-    console.log(`⏳ Cargando: ${url}`);
-    const respuesta = await fetch(url);
-    const html = await respuesta.text();
+async function scrapUrl(url) {
+  console.log(`⏳ Cargando: ${url}`);
+  const respuesta = await fetch(url);
+  const html = await respuesta.text();
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
 
-    const piezas = doc.querySelectorAll('div.lista_grupo div.lista_pieza');
-    const productos = [];
+  const piezas = doc.querySelectorAll('div.lista_grupo div.lista_pieza');
+  const productos = [];
 
-    piezas.forEach((pieza) => {
-      const enlaceEl = pieza.querySelector('div.lista_foto a');
-      const enlace = enlaceEl ? new URL(enlaceEl.getAttribute('href'), location.origin).href : '';
+  piezas.forEach((pieza) => {
+    // Imagen
+    const imgEl = pieza.querySelector('div.lista_foto img');
+    const imagen = imgEl ? new URL(imgEl.getAttribute('src'), location.origin).href : '';
 
-      const imgEl = pieza.querySelector('div.lista_foto img');
-      const imagen = imgEl ? new URL(imgEl.getAttribute('src'), location.origin).href : '';
+    // Enlace y texto (manejar ambas variantes)
+    let enlace = '';
+    let texto = '';
 
-      const textoEl = pieza.querySelector('div.lista_texto a.lista_ref_ref');
-      const texto = textoEl?.innerText.trim() || '';
+    // Variante 1: con <a class="lista_ref_ref">
+    const enlaceEl = pieza.querySelector('div.lista_texto a.lista_ref_ref');
+    if (enlaceEl) {
+      enlace = new URL(enlaceEl.getAttribute('href'), location.origin).href;
+      texto = enlaceEl.innerText.trim();
+    } else {
+      // Variante 2: con onclick y <span>
+      const textoDiv = pieza.querySelector('div.lista_texto');
+      if (textoDiv) {
+        const onclick = textoDiv.getAttribute('onclick');
+        if (onclick) {
+          const match = onclick.match(/'([^']+)'|"(.*?)"/);
+          if (match) {
+            enlace = new URL(match[1] || match[2], location.origin).href;
+          }
+        }
 
-      const [refLine, descLine] = texto.split('\n');
-      const referencia = refLine?.replace('Ref.:', '').trim() || '';
-      const descripcion = descLine?.trim() || '';
+        // Buscar cualquier <span> dentro de textoDiv
+        const span = textoDiv.querySelector('span');
+        texto = span ? span.innerText.trim() : textoDiv.innerText.trim();
+      }
+    }
 
-      productos.push({
-        referencia,
-        descripcion,
-        enlace,
-        imagen
-      });
+    // Separar referencia y descripción
+    const [refLine, descLine] = texto.split('\n');
+    const referencia = refLine?.replace(/Ref\.:/, '').replace(/NUEVO/, '').trim() || '';
+    const descripcion = descLine?.trim() || '';
+
+    productos.push({
+      referencia,
+      descripcion,
+      enlace,
+      imagen
     });
+  });
 
-    console.log(`✅ Productos encontrados en ${url}: ${productos.length}`);
+  console.log(`✅ Productos encontrados en ${url}: ${productos.length}`);
+  console.log(productos);
 
-    // Crear nombre de archivo a partir de la URL
-    const urlObj = new URL(url);
-    const nombreCategoria = urlObj.searchParams.get('t') || 'categoria';
-    const filename = `productos_${nombreCategoria.replace(/[^\w]/g, '_')}.xlsx`;
+  // Crear nombre de archivo a partir de la URL
+  const urlObj = new URL(url);
+  const nombreCategoria = urlObj.searchParams.get('t') || 'categoria';
+  const filename = `productos_${nombreCategoria.replace(/[^\w]/g, '_')}.xlsx`;
 
-    createExcel(productos, filename);
-  }
+  createExcel(productos, filename);
+}
 
   function createExcel(data, filename) {
     const ws = XLSX.utils.json_to_sheet(data);
