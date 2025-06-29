@@ -1,31 +1,13 @@
 (async () => {
   const productos = [];
 
-  const baseUrl = "https://www.nowley.com";
-  const searchInput = document.querySelector("#search_query_top");
-  const searchTerm = searchInput?.value?.trim();
+  // Obtener la URL base (sin paginación hash)
+  const baseUrl = location.href.split("#")[0];
 
-  if (!searchTerm) {
-    console.warn("❌ No se encontró término de búsqueda en el input.");
-    return;
-  }
+  // Construir URL con hash para cada página
+  const buildPageUrl = (page) => (page > 1 ? `${baseUrl}#/page-${page}` : baseUrl);
 
-  console.log(`🔎 Buscando productos con: "${searchTerm}"`);
-
-  const buildSearchUrl = (page = 1) => {
-    const params = new URLSearchParams({
-      controller: "search",
-      orderby: "position",
-      orderway: "desc",
-      search_query: searchTerm,
-      submit_search: "",
-    });
-
-    if (page > 1) params.append("p", page);
-
-    return `${baseUrl}/es/buscar?${params.toString()}`;
-  };
-
+  // Obtener total de páginas desde un documento
   const getTotalPages = (doc) => {
     const pages = [...doc.querySelectorAll("ul.pagination li a span")]
       .map((el) => parseInt(el.textContent))
@@ -33,16 +15,16 @@
     return pages.length ? Math.max(...pages) : 1;
   };
 
+  // Descargar y parsear página
   async function fetchPage(url) {
     const response = await fetch(url);
     const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    return doc;
+    return new DOMParser().parseFromString(html, "text/html");
   }
 
+  // Extraer productos de documento
   function scrapeFromDoc(doc) {
     const items = doc.querySelectorAll("ul.product_list li.ajax_block_product");
-
     items.forEach((item) => {
       const nombre = item.querySelector(".product-name")?.textContent.trim() || "";
       const enlace = item.querySelector(".product_img_link")?.href || "";
@@ -56,16 +38,17 @@
     });
   }
 
-  const firstUrl = buildSearchUrl(1);
-  const firstDoc = await fetchPage(firstUrl);
+  // Procesar primera página para ver total
+  console.log(`🔎 Procesando categoría actual: ${baseUrl}`);
+  const firstDoc = await fetchPage(buildPageUrl(1));
   scrapeFromDoc(firstDoc);
   const totalPages = getTotalPages(firstDoc);
-
   console.log(`📄 Total de páginas: ${totalPages}`);
 
+  // Procesar resto de páginas
   for (let p = 2; p <= totalPages; p++) {
-    const pageUrl = buildSearchUrl(p);
-    console.log(`⏳ Procesando página ${p}...`);
+    const pageUrl = buildPageUrl(p);
+    console.log(`⏳ Procesando página ${p}/${totalPages}`);
     const doc = await fetchPage(pageUrl);
     scrapeFromDoc(doc);
   }
@@ -74,28 +57,21 @@
   console.table(productos);
 
   // Descargar como Excel
-  // Cargar SheetJS desde CDN
-  const script = document.createElement("script");
-  script.src = "https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js";
-  script.onload = () => {
-    const ws = XLSX.utils.json_to_sheet(productos);
+  function createAndDownloadExcel(data, filename = "productos_categoria.xlsx") {
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Productos");
-
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-
-    const blob = new Blob([wbout], { type: "application/octet-stream" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `productos_${searchTerm}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+    XLSX.writeFile(wb, filename);
     console.log("✅ Archivo Excel generado y descargado.");
-  };
-  document.body.appendChild(script);
+  }
+
+  // Cargar SheetJS si no está cargado
+  if (typeof XLSX === "undefined") {
+    const script = document.createElement("script");
+    script.src = "https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js";
+    script.onload = () => createAndDownloadExcel(productos);
+    document.head.appendChild(script);
+  } else {
+    createAndDownloadExcel(productos);
+  }
 })();
