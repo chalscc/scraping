@@ -12,10 +12,8 @@
     window.scrollTo(0, document.body.scrollHeight);
     console.log("🔽 Scroll rápido...");
 
-    // Espera más corta
     await sleep(500);
 
-    // Comprobamos si el loader sigue visible
     let tries = 10;
     while (tries > 0) {
       const loaderVisible = document.querySelector(".ajax-products-busy")?.offsetParent !== null;
@@ -34,7 +32,6 @@
 
     lastCount = currentCount;
 
-    // Pausa mínima antes de volver a hacer scroll
     await sleep(200);
   }
 
@@ -47,7 +44,10 @@
     const enlaceEl = item.querySelector("h2.product-title a");
     const nombre = enlaceEl?.innerText.trim() || "";
     const enlace = enlaceEl ? new URL(enlaceEl.getAttribute("href"), location.origin).href : "";
-    const imagen = item.querySelector(".picture img")?.getAttribute("src") || "";
+
+    const imgEl = item.querySelector(".picture img");
+    const imagen = imgEl?.getAttribute("data-lazyloadsrc") || imgEl?.getAttribute("src") || "";
+
     const precio = item.querySelector(".prices .price")?.innerText.trim() || "";
     const referencia = item.querySelector(".sku")?.innerText.trim() || "";
     const descripcion = item.querySelector(".description")?.innerText.trim() || "";
