@@ -340,11 +340,12 @@ async function scrapUrl(url) {
         tramo: ''
       });
     } else {
-      // Numeración incremental por producto SOLO para tramos
+      // Numeración incremental por producto para tramos y variantes
       let tramoN = 0;
       precios.forEach(p => {
         const esTramo = (p.tipoPrecio || '').toLowerCase() === 'tramo';
-        if (esTramo) tramoN += 1;
+        const esVariante = (p.tipoPrecio || '').toLowerCase() === 'variante';
+        if (esTramo || esVariante) tramoN += 1;
 
         filasExcel.push({
           referencia,
@@ -356,7 +357,7 @@ async function scrapUrl(url) {
           precio: p.precio || '',
           variante: p.variante || '',
           pesoGramos: p.pesoGramos || '',
-          tramo: esTramo ? tramoN : ''
+          tramo: (esTramo || esVariante) ? tramoN : ''
         });
       });
     }
