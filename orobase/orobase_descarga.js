@@ -177,95 +177,82 @@
 
 async function scrapUrl(url) {
   console.log(`⏳ Cargando: ${url}`);
-  const respuesta = await fetch(url);
-  const html = await respuesta.text();
+  const resp = await fetch(url);
+  const html = await resp.text();
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
-  const piezas = doc.querySelectorAll('div.lista_grupo div.lista_pieza');
+  const piezas = doc.querySelectorAll('.lista_pieza'); // antes era 'div.lista_grupo div.lista_pieza'
   const productos = [];
 
   piezas.forEach((pieza) => {
     // Imagen
-    const imgEl = pieza.querySelector('div.lista_foto img');
-    const imagen = imgEl ? new URL(imgEl.getAttribute('src'), location.origin).href : '';
+    const imgEl = pieza.querySelector('.lista_foto img');
+    const imagen = imgEl ? new URL(imgEl.getAttribute('src'), url).href : '';
 
-    // Enlace y texto (manejar ambas variantes)
-    let enlace = '';
-    let texto = '';
+    // Enlace y texto
+    const enlaceEl = pieza.querySelector('.lista_texto a.lista_ref_ref');
+    const enlace = enlaceEl ? new URL(enlaceEl.getAttribute('href'), url).href : '';
 
-    // Variante 1: con <a class="lista_ref_ref">
-    const enlaceEl = pieza.querySelector('div.lista_texto a.lista_ref_ref');
+    // Importante: usar innerHTML y partir por <br>
+    let referencia = '';
+    let descripcion = '';
     if (enlaceEl) {
-      enlace = new URL(enlaceEl.getAttribute('href'), location.origin).href;
-      texto = enlaceEl.innerText.trim();
-    } else {
-      // Variante 2: con onclick y <span>
-      const textoDiv = pieza.querySelector('div.lista_texto');
-      if (textoDiv) {
-        const onclick = textoDiv.getAttribute('onclick');
-        if (onclick) {
-          const match = onclick.match(/'([^']+)'|"(.*?)"/);
-          if (match) {
-            enlace = new URL(match[1] || match[2], location.origin).href;
-          }
-        }
+      const [refHtml = '', descHtml = ''] = enlaceEl.innerHTML.split(/<br\s*\/?>/i);
+      const refLine = refHtml.replace(/<[^>]*>/g, '').trim();
+      const descLine = descHtml.replace(/<[^>]*>/g, '').trim();
 
-        // Buscar cualquier <span> dentro de textoDiv
-        const span = textoDiv.querySelector('span');
-        texto = span ? span.innerText.trim() : textoDiv.innerText.trim();
+      referencia = refLine.replace(/Ref\.\s*:/i, '').trim();
+      descripcion = descLine;
+    }
+
+    // Fallback con ALT si hiciera falta
+    if (!descripcion && imgEl?.alt) {
+      const m = imgEl.alt.match(/Ref\.\s*:\s*([^\s-]+)\s*[-–—]\s*(.+)/i);
+      if (m) {
+        if (!referencia) referencia = m[1].trim();
+        descripcion = m[2].trim();
       }
     }
 
-    // Separar referencia y descripción
-    const [refLine, descLine] = texto.split('\n');
-    const referencia = refLine?.replace(/Ref\.:/, '').replace(/NUEVO/, '').trim() || '';
-    const descripcion = descLine?.trim() || '';
-
-    productos.push({
-      referencia,
-      descripcion,
-      enlace,
-      imagen
-    });
+    productos.push({ referencia, descripcion, enlace, imagen });
   });
 
   console.log(`✅ Productos encontrados en ${url}: ${productos.length}`);
   console.log(productos);
 
-  // Crear nombre de archivo a partir de la URL
   const urlObj = new URL(url);
   const nombreCategoria = urlObj.searchParams.get('t') || 'categoria';
   const filename = `productos_${nombreCategoria.replace(/[^\w]/g, '_')}.xlsx`;
 
-  createExcel(productos, filename);
+  crearExcel(productos, filename);
 }
 
-  function createExcel(data, filename) {
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Productos");
-    XLSX.writeFile(wb, filename);
-    console.log(`✅ Archivo Excel generado: ${filename}`);
+function crearExcel(datos, nombreArchivo) {
+  const ws = XLSX.utils.json_to_sheet(datos);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Productos");
+  XLSX.writeFile(wb, nombreArchivo);
+  console.log(`📦 Excel creado: ${nombreArchivo}`);
+}
+
+function cargarSheetJs(callback) {
+  if (typeof XLSX === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+    script.onload = callback;
+    document.head.appendChild(script);
+  } else {
+    callback();
   }
+}
 
-  function loadSheetJs(callback) {
-    if (typeof XLSX === 'undefined') {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
-      script.onload = callback;
-      document.head.appendChild(script);
-    } else {
-      callback();
-    }
+// Ejecutar
+cargarSheetJs(async () => {
+  for (const url of urls) {
+    await scrapUrl(url);
   }
-
-  loadSheetJs(async () => {
-    for (const url of urls) {
-      await scrapUrl(url);
-    }
-
-    console.log("🎉 Scraping completado. Todos los Excels generados.");
-  });
+  console.log("🎉 Scraping terminado. Excels creados.");
+});
 })();
