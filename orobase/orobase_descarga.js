@@ -1,6 +1,15 @@
 (async () => {
 
-  const oro = [
+  const toSameOrigin = (u) => {
+    const x = new URL(u);
+    x.protocol = location.protocol;
+    x.host = location.host;
+    return x.toString();
+  };
+
+  const normalizeAll = (arr) => arr.map(toSameOrigin);
+
+  const oro = normalizeAll([
     'https://orobase.es/articulos.php?m=100&p=1080&t=Anillas',
     'https://orobase.es/articulos.php?m=100&p=1220&t=Ballestillas',
     'https://orobase.es/articulos.php?m=100&p=1360&t=Bolas',
@@ -47,13 +56,13 @@
     'https://orobase.es/articulos.php?m=200&p=1030&t=Mosquetones',
     'https://orobase.es/articulos.php?m=200&p=1130&t=Presiones',
     'https://orobase.es/articulos.php?m=200&p=1010&t=Reasas'
-  ]
+  ])
 
-  const galeriasGrarrasChatones = [
+  const galeriasGrarrasChatones = normalizeAll([
     'https://orobase.es/articulos.php?m=100&p=1320'
-  ]
+  ])
 
-  const foniturasGoldFilled = [
+  const foniturasGoldFilled = normalizeAll([
     'https://orobase.es/articulos.php?m=400&p=1080&t=Anillas',
     'https://orobase.es/articulos.php?m=400&p=1220&t=Ballestillas',
     'https://orobase.es/articulos.php?m=400&p=1360&t=Bolas',
@@ -69,9 +78,9 @@
     'https://orobase.es/articulos.php?m=400&p=1130&t=Presiones',
     'https://orobase.es/articulos.php?m=400&p=1010&t=Reasas',
     'https://orobase.es/articulos.php?m=400&p=1170&t=Terminales'
-  ]
+  ])
 
-  const forniturasPlata = [
+  const forniturasPlata = normalizeAll([
     'https://orobase.es/articulos.php?m=300&p=1630&t=Acortacollares',
     'https://orobase.es/articulos.php?m=300&p=1055&t=Alargadores',
     'https://orobase.es/articulos.php?m=300&p=1080&t=Anillas',
@@ -126,23 +135,23 @@
     'https://orobase.es/articulos.php?m=300&p=1170&t=Terminales',
     'https://orobase.es/articulos.php?m=300&p=1500&t=Tubos',
     'https://orobase.es/articulos.php?m=300&p=1150&t=Tuercas y palillos'
-  ];
-  const forniturasOtrosMateriales = [
+  ]);
+  const forniturasOtrosMateriales = normalizeAll([
     'https://orobase.es/articulos.php?m=500&p=1520&t=Hilos',
     'https://orobase.es/articulos.php?m=500&p=1530&t=Pins',
     'https://orobase.es/articulos.php?m=500&p=1130&t=Presiones',
     'https://orobase.es/articulos.php?m=500&p=2000&t=Productos de limpieza para joyería',
     'https://orobase.es/articulos.php?m=500&p=1540&t=Tapapuntas',
     'https://orobase.es/articulos.php?m=500&p=2000'
-  ];
+  ]);
 
-  const cadenasOro = [
+  const cadenasOro = normalizeAll([
     'https://orobase.es/articulos.php?m=700&p=500',
     'https://orobase.es/articulos.php?m=750&p=550',
     'https://orobase.es/articulos.php?m=650&p=300'
-  ];
+  ]);
 
-  const cadenasPlata = [
+  const cadenasPlata = normalizeAll([
     'https://orobase.es/articulos.php?m=600&p=260',
     'https://orobase.es/articulos.php?m=600&p=263',
     'https://orobase.es/articulos.php?m=600&p=265',
@@ -154,7 +163,7 @@
     'https://orobase.es/articulos.php?m=600&p=280',
     'https://orobase.es/articulos.php?m=600&p=290',
     'https://orobase.es/articulos.php?promociones=cadenas_plata'
-  ];
+  ]);
 
   const urls = [
     ...oro,
