@@ -175,84 +175,227 @@
     ...cadenasPlata
   ];
 
+  const SLEEP_MS_BETWEEN_DETAIL = 150; // pequeña pausa para no saturar
+
+  const text = (el) => (el ? el.textContent.trim() : '').trim();
+  const html = (el) => (el ? el.innerHTML : '');
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const cleanNumber = (s) => {
+    if (!s) return '';
+    // Normaliza "6,145" -> "6.145" y quita separadores de miles estilo europeo
+    const t = s.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    return t;
+  };
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function fetchDoc(url) {
+    const resp = await fetch(url, { credentials: 'same-origin' });
+    const raw = await resp.text();
+    const parser = new DOMParser();
+    return parser.parseFromString(raw, 'text/html');
+  }
+
+  async function extraerPreciosDesdeFicha(detalleUrl) {
+    const doc = await fetchDoc(detalleUrl);
+    const tabla = doc.querySelector('#tabla_ref_datos');
+    const precios = [];
+    if (!tabla) return precios;
+
+    const filas = Array.from(tabla.querySelectorAll('tr'));
+    // Saltar la cabecera (th) y el último bloque de botones
+    for (const tr of filas) {
+      const tds = Array.from(tr.querySelectorAll('td.borde'));
+      if (tds.length >= 2) {
+        // La estructura esperada: [Unidades, Precio, (Cantidad rowspan), Importe]
+        const unidadesTd = tds[0];
+        const precioTd = tds[1];
+
+        const unidades = clean(unidadesTd ? unidadesTd.textContent.replace(/\(.*?\)/g, '') : '');
+        const precioStr = clean(precioTd ? precioTd.textContent : '');
+        if (unidades && precioStr) {
+          precios.push({
+            tipoPrecio: 'tramo',
+            unidades,
+            precio: cleanNumber(precioStr)
+          });
+        }
+      }
+    }
+    return precios;
+  }
+
+  function extraerPreciosDesdeListado(pieza) {
+    // Caso 1: precio por gramo dentro de un span (nota: hay un typo 'clas' a veces)
+    const textoNodo = pieza.querySelector('.lista_texto span, .lista_texto .lista_ref_ref, .lista_texto');
+    const fullText = clean(text(textoNodo));
+
+    const precios = [];
+
+    // Detecta "…: 91,87 €/gramo"
+    const mGramo = fullText.match(/([\d\.,]+)\s*€\s*\/\s*gramo/i);
+    if (mGramo) {
+      precios.push({
+        tipoPrecio: 'precio_por_gramo',
+        unidades: '€/gramo',
+        precio: cleanNumber(mGramo[1])
+      });
+    }
+
+    // Caso 2: variantes con enlaces: "42 cm 79,93 € 0,87 g"
+    const variantes = pieza.querySelectorAll('.lista_texto a');
+    variantes.forEach(a => {
+      const t = clean(text(a));
+      // Captura: [variante] [precio €] [peso opcional]
+      // p.ej. "42 cm 79,93 € 0,87 g"
+      const m = t.match(/^(.*?)\s+([\d\.,]+)\s*€(?:\s+([\d\.,]+)\s*g)?/i);
+      if (m) {
+        precios.push({
+          tipoPrecio: 'variante',
+          variante: clean(m[1]),
+          precio: cleanNumber(m[2]),
+          pesoGramos: m[3] ? cleanNumber(m[3]) : ''
+        });
+      }
+    });
+
+    return precios;
+  }
+
 async function scrapUrl(url) {
   console.log(`⏳ Cargando: ${url}`);
-  const resp = await fetch(url);
-  const html = await resp.text();
+  const doc = await fetchDoc(url);
+  const piezas = doc.querySelectorAll('.lista_pieza'); 
+  const filasExcel = [];
 
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-
-  const piezas = doc.querySelectorAll('.lista_pieza'); // antes era 'div.lista_grupo div.lista_pieza'
-  const productos = [];
-
-  piezas.forEach((pieza) => {
+  for (const pieza of Array.from(piezas)) {
     // Imagen
     const imgEl = pieza.querySelector('.lista_foto img');
     const imagen = imgEl ? new URL(imgEl.getAttribute('src'), url).href : '';
 
     // Enlace y texto
-    const enlaceEl = pieza.querySelector('.lista_texto a.lista_ref_ref');
+    const enlaceEl = pieza.querySelector('.lista_texto a.lista_ref_ref') || pieza.querySelector('.lista_texto a[href*="referencia.php"]');
     const enlace = enlaceEl ? new URL(enlaceEl.getAttribute('href'), url).href : '';
 
-    // Importante: usar innerHTML y partir por <br>
+    // Referencia y descripción (usando innerHTML y <br>)
     let referencia = '';
     let descripcion = '';
-    if (enlaceEl) {
-      const [refHtml = '', descHtml = ''] = enlaceEl.innerHTML.split(/<br\s*\/?>/i);
-      const refLine = refHtml.replace(/<[^>]*>/g, '').trim();
-      const descLine = descHtml.replace(/<[^>]*>/g, '').trim();
-
-      referencia = refLine.replace(/Ref\.\s*:/i, '').trim();
+    if (enlaceEl && /lista_ref_ref/.test(enlaceEl.className || '')) {
+      const [refHtml = '', descHtml = ''] = html(enlaceEl).split(/<br\s*\/?>/i);
+      const refLine = clean(refHtml.replace(/<[^>]*>/g, ''));
+      const descLine = clean(descHtml.replace(/<[^>]*>/g, ''));
+      referencia = clean(refLine.replace(/Ref\.\s*:/i, ''));
       descripcion = descLine;
+    } else {
+      // Fallback: intentar capturar ref/desc del bloque de texto
+      const txtBlock = pieza.querySelector('.lista_texto') || pieza;
+      const raw = html(txtBlock);
+      if (raw) {
+        const [refHtml = '', descHtml = ''] = raw.split(/<br\s*\/?>/i);
+        const refLine = clean(refHtml.replace(/<[^>]*>/g, ''));
+        const descLine = clean(descHtml.replace(/<[^>]*>/g, ''));
+        const mRef = refLine.match(/Ref\.\s*:\s*([^\s<]+)/i);
+        if (mRef) referencia = clean(mRef[1]);
+        if (descLine) descripcion = descLine;
+      }
     }
 
     // Fallback con ALT si hiciera falta
     if (!descripcion && imgEl?.alt) {
       const m = imgEl.alt.match(/Ref\.\s*:\s*([^\s-]+)\s*[-–—]\s*(.+)/i);
       if (m) {
-        if (!referencia) referencia = m[1].trim();
-        descripcion = m[2].trim();
+        if (!referencia) referencia = clean(m[1]);
+        descripcion = clean(m[2]);
       }
     }
 
-    productos.push({ referencia, descripcion, enlace, imagen });
-  });
+    // Detectar si hay "VER PRECIOS"
+    const hayVerPrecios = !!Array.from(pieza.querySelectorAll('a')).find(a => /ver\s*precios/i.test(a.textContent || ''));
 
-  console.log(`✅ Productos encontrados en ${url}: ${productos.length}`);
-  console.log(productos);
+    let precios = [];
+    if (hayVerPrecios && enlace) {
+      try {
+        await sleep(SLEEP_MS_BETWEEN_DETAIL);
+        precios = await extraerPreciosDesdeFicha(enlace);
+      } catch (e) {
+        console.warn('No se pudieron extraer precios de la ficha:', enlace, e);
+      }
+    } else {
+      // Intentar leer precios directamente del listado (precio por gramo / variantes)
+      precios = extraerPreciosDesdeListado(pieza);
+    }
+
+    if (precios.length === 0) {
+      // Sin precios: fila básica
+      filasExcel.push({
+        referencia,
+        descripcion,
+        enlace,
+        imagen,
+        tipoPrecio: '',
+        unidades: '',
+        precio: '',
+        variante: '',
+        pesoGramos: '',
+        tramo: ''
+      });
+    } else {
+      // Numeración incremental por producto SOLO para tramos
+      let tramoN = 0;
+      precios.forEach(p => {
+        const esTramo = (p.tipoPrecio || '').toLowerCase() === 'tramo';
+        if (esTramo) tramoN += 1;
+
+        filasExcel.push({
+          referencia,
+          descripcion,
+          enlace,
+          imagen,
+          tipoPrecio: p.tipoPrecio || '',
+          unidades: p.unidades || '',
+          precio: p.precio || '',
+          variante: p.variante || '',
+          pesoGramos: p.pesoGramos || '',
+          tramo: esTramo ? tramoN : ''
+        });
+      });
+    }
+  }
+
+  console.log(`✅ Filas generadas en ${url}: ${filasExcel.length}`);
+  console.log(filasExcel);
 
   const urlObj = new URL(url);
   const nombreCategoria = urlObj.searchParams.get('t') || 'categoria';
   const filename = `productos_${nombreCategoria.replace(/[^\w]/g, '_')}.xlsx`;
 
-  crearExcel(productos, filename);
+  crearExcel(filasExcel, filename);
 }
 
-function crearExcel(datos, nombreArchivo) {
-  const ws = XLSX.utils.json_to_sheet(datos);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Productos");
-  XLSX.writeFile(wb, nombreArchivo);
-  console.log(`📦 Excel creado: ${nombreArchivo}`);
-}
-
-function cargarSheetJs(callback) {
-  if (typeof XLSX === 'undefined') {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
-    script.onload = callback;
-    document.head.appendChild(script);
-  } else {
-    callback();
+  function crearExcel(datos, nombreArchivo) {
+    const ws = XLSX.utils.json_to_sheet(datos);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Productos");
+    XLSX.writeFile(wb, nombreArchivo);
+    console.log(`📦 Excel creado: ${nombreArchivo}`);
   }
-}
 
-// Ejecutar
-cargarSheetJs(async () => {
-  for (const url of urls) {
-    await scrapUrl(url);
+  function cargarSheetJs(callback) {
+    if (typeof XLSX === 'undefined') {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+      script.onload = callback;
+      document.head.appendChild(script);
+    } else {
+      callback();
+    }
   }
-  console.log("🎉 Scraping terminado. Excels creados.");
-});
+
+  // Ejecutar
+  cargarSheetJs(async () => {
+    for (const url of urls) {
+      await scrapUrl(url);
+    }
+    console.log("🎉 Scraping terminado. Excels creados.");
+  });
 })();
