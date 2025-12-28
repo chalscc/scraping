@@ -435,7 +435,7 @@ const URLS_ACERO = [
 
   const CONFIG = {
     delayEntreRequests: 1500,  // ms entre peticiones
-    maxPaginasPorCategoria: 50, // límite de seguridad
+    maxPaginasPorCategoria: 500, // límite de seguridad
     nombreExcel: 'euroval_productos_completo.xlsx'
   };
 
